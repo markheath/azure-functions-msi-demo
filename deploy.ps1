@@ -62,6 +62,7 @@ az keyvault set-policy -n $keyvaultname -g $resourceGroup --object-id $principal
 # see the access policies added:
 az keyvault show -n $keyvaultname -g $resourceGroup --query "properties.accessPolicies[?objectId == ``$principalId``]"
 
+# 8 - deploy our function app
 
 
 az group delete -n $resourceGroup
