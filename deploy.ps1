@@ -63,6 +63,67 @@ az keyvault set-policy -n $keyvaultname -g $resourceGroup --object-id $principal
 az keyvault show -n $keyvaultname -g $resourceGroup --query "properties.accessPolicies[?objectId == ``$principalId``]"
 
 # 8 - deploy our function app
+dotnet publish -c Release
+$publishFolder = "FunctionsMsi/bin/Release/netcoreapp2.1/publish"
 
+# create the zip
+$publishZip = "publish.zip"
+if(Test-path $publishZip) {Remove-item $publishZip}
+Add-Type -assembly "system.io.compression.filesystem"
+[io.compression.zipfile]::CreateFromDirectory($publishFolder, $publishZip)
+
+az functionapp deployment source config-zip `
+ -g $resourceGroup -n $functionAppName --src $publishZip
+
+
+az functionapp config show -n $functionAppName -g $resourceGroup
+
+# 9 - get the credentials to call our API
+# https://www.markheath.net/post/managing-azure-function-keys
+function getKuduCreds($appName, $resourceGroup)
+{
+    $user = az webapp deployment list-publishing-profiles -n $appName -g $resourceGroup `
+            --query "[?publishMethod=='MSDeploy'].userName" -o tsv
+
+    $pass = az webapp deployment list-publishing-profiles -n $appName -g $resourceGroup `
+            --query "[?publishMethod=='MSDeploy'].userPWD" -o tsv
+
+    $pair = "$($user):$($pass)"
+    $encodedCreds = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($pair))
+    return $encodedCreds
+}
+
+function getFunctionKey([string]$appName, [string]$functionName, [string]$encodedCreds)
+{
+    $jwt = Invoke-RestMethod -Uri "https://$appName.scm.azurewebsites.net/api/functions/admin/token" -Headers @{Authorization=("Basic {0}" -f $encodedCreds)} -Method GET
+
+    $keys = Invoke-RestMethod -Method GET -Headers @{Authorization=("Bearer {0}" -f $jwt)} `
+            -Uri "https://$appName.azurewebsites.net/admin/functions/$functionName/keys" 
+
+    $code = $keys.keys[0].value
+    return $code
+}
+
+$kuduCreds = getKuduCreds $functionAppName $resourceGroup 
+$functionName = "GetAppSetting"
+$functionKey = getFunctionKey $functionAppName $functionName $kuduCreds
+
+
+# 10 - add a new app setting referencing a secret
+# TODO
+# grr - doesn't seem possible to set secrets in this form using the azure cli
+$secret2 = "Secret2=@Microsoft.KeyVault(SecretUri=$secretId)"
+az functionapp config appsettings set -n $functionAppName -g $resourceGroup `
+    --settings $secret2 
+
+
+# 11 - access the secrets with the function api
+$funcUri = "https://$functionAppName.azurewebsites.net/api/$functionName" + "?code=$functionKey"
+
+
+
+Invoke-RestMethod "$funcUri&name=Secret1"
+Invoke-RestMethod "$funcUri&name=Secret2"
+Invoke-RestMethod "$funcUri&name=MSI_ENDPOINT"
 
 az group delete -n $resourceGroup
