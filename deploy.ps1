@@ -126,5 +126,25 @@ Invoke-RestMethod "$funcUri&name=Secret1"
 Invoke-RestMethod "$funcUri&name=Secret2"
 Invoke-RestMethod "$funcUri&name=MSI_ENDPOINT"
 
-# 12 - when we're done, clean up
+# 12 - Bonus - let's create app insights and get that set up as well
+# in powershell its really hard to pass the json with correct syntax escaping, 
+# so easier just to write to a temp file
+$propsFile = "props.json"
+'{"Application_Type":"web"}' | Out-File $propsFile
+$appInsightsName = "funcsmsi$rand"
+az resource create `
+    -g $resourceGroup -n $appInsightsName `
+    --resource-type "Microsoft.Insights/components" `
+    --properties "@$propsFile"
+Remove-Item $propsFile
+
+$appInsightsKey = az resource show -g $resourceGroup -n $appInsightsName `
+    --resource-type "Microsoft.Insights/components" `
+    --query "properties.InstrumentationKey" -o tsv
+
+az functionapp config appsettings set -n $functionAppName -g $resourceGroup `
+    --settings "APPINSIGHTS_INSTRUMENTATIONKEY=$appInsightsKey"
+
+
+# 13 - when we're done, clean up
 az group delete -n $resourceGroup
