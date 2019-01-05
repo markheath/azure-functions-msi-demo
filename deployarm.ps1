@@ -15,7 +15,8 @@ az group deployment validate -g $resourceGroup --template-file $armTemplate `
 az group deployment create -g $resourceGroup --template-file $armTemplate `
     --parameters "appName=$functionAppName" "dailyMemoryTimeQuota=10208"
 
-# nb doesn't appear to be a way to see/set that setting from here?
-az functionapp config show -g $resourceGroup -n $functionAppName
+# another way to set the quota
+az functionapp show -g $resourceGroup -n $functionAppName --query dailyMemoryTimeQuota
+az functionapp update -g $resourceGroup -n $functionAppName --set dailyMemoryTimeQuota=12460
 
 az group delete -n $resourceGroup -y
