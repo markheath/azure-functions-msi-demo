@@ -110,20 +110,21 @@ $functionKey = getFunctionKey $functionAppName $functionName $kuduCreds
 
 
 # 10 - add a new app setting referencing a secret
-# TODO
-# grr - doesn't seem possible to set secrets in this form using the azure cli
-$secret2 = "Secret2=@Microsoft.KeyVault(SecretUri=$secretId)"
+# really bizarre issue with setting this sort of secret. Need to use a special 
+# ^^ escaping character - https://ss64.com/nt/syntax-esc.html
+#
+$secret2 = "Secret2=@Microsoft.KeyVault(SecretUri=$secretId^^)"
 az functionapp config appsettings set -n $functionAppName -g $resourceGroup `
-    --settings $secret2 
+    --settings "Secret1=blah" $secret2
 
+az functionapp config appsettings list -n $functionAppName -g $resourceGroup
 
 # 11 - access the secrets with the function api
 $funcUri = "https://$functionAppName.azurewebsites.net/api/$functionName" + "?code=$functionKey"
-
-
 
 Invoke-RestMethod "$funcUri&name=Secret1"
 Invoke-RestMethod "$funcUri&name=Secret2"
 Invoke-RestMethod "$funcUri&name=MSI_ENDPOINT"
 
+# 12 - when we're done, clean up
 az group delete -n $resourceGroup
